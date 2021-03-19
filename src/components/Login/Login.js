@@ -1,177 +1,122 @@
-import { useContext, useEffect, useState } from 'react';
-import firebase from "firebase/app";
-import "firebase/auth";
-import firebaseConfig from './fireBase.config';
+import React, { useContext, useState } from 'react';
+import { useHistory, useLocation } from 'react-router-dom';
 import { userContext } from '../../App';
-import { useHistory, useLocation } from 'react-router';
+import {handleGoogleSignIn, handleSignOut, handleFbSignIn, createUserWithEmailAndPassword, signInWithEmailAndPassword, initializeLoginFramework, initalizefirebase } from './LoginManager';
 
 
-if (!firebase.apps.length) {
-  firebase.initializeApp(firebaseConfig);
-}else {
-  firebase.app(); 
-}
 
 function Login() {
   const [newUser, setNewUser] = useState(false);
   const [user, setUser] = useState({
+    isSignedIn: false,
     name: '',
-    photo: '',
     email: '',
     password: '',
-    error: '',
-    success: false,
-    isLoggedIn: false
+    photo: ''
   });
-  const [loggedInUser, setLoggedInUser] = useContext(userContext);
+  initalizefirebase();
+
+  const [loggedInUser, setLoggedInUser ] = useContext(userContext);
   const history = useHistory();
   const location = useLocation();
-  const {from} = location.state || {form: {pathname: '/'}};
+  let { from } = location.state || { from: { pathname: "/" } };
 
-  //hanlde sign in with google
-  const GoogleProvider = new firebase.auth.GoogleAuthProvider();
-  const handleGoogleSignIn = () => {
-    firebase.auth()
-      .signInWithPopup(GoogleProvider)
+  const googleSignIn = () => {
+      handleGoogleSignIn()
       .then(res => {
-        const { displayName, email, photoURL } = res.user;
-        const signedInUser = {
-          name: displayName,
-          email: email,
-          photo: photoURL,
-          isLoggedIn: true,
-        }
-        setUser(signedInUser);
+        handleResponse(res, true);
       })
-      .catch(error => {
-        console.log(error);
-      });
   }
-  const handleSignOUt = () => {
-    firebase.auth().signOut()
-      .then(() => {
-        const isSignedOutUser = {
-          isLoggedIn: false,
-          photo: '',
-          email: '',
-          name: ''
-        }
-        setUser(isSignedOutUser);
-        console.log("signed out successfully")
+
+  const fbSignIn = () => {
+      handleFbSignIn()
+      .then(res => {
+        handleResponse(res, true);
       })
-      .catch((error) => {
-        console.log(error)
-      });
+
   }
-  //handle sign in with email and password
-  const handleOnBlur = (e) => {
+
+  const signOut = () => {
+      handleSignOut()
+      .then(res => {
+          handleResponse(res, false);
+      })
+  }
+
+  const handleResponse = (res, redirect) =>{
+    setUser(res);
+    setLoggedInUser(res);
+    if(redirect){
+        history.replace(from);
+    }
+  }
+
+  const handleBlur = (e) => {
     let isFieldValid = true;
-    if (e.target.name === 'email') {
+    if(e.target.name === 'email'){
       isFieldValid = /\S+@\S+\.\S+/.test(e.target.value);
-      // console.log(isFieldValid)
     }
-    if (e.target.name === 'password') {
-      const isLargePassword = e.target.value.length > 8;
-      const isPasswordValid = /\d{1}/.test(e.target.value);
-      isFieldValid = isLargePassword && isPasswordValid;
-      // console.log(isFieldValid)
+    if(e.target.name === 'password'){
+      const isPasswordValid = e.target.value.length > 6;
+      const passwordHasNumber =  /\d{1}/.test(e.target.value);
+      isFieldValid = isPasswordValid && passwordHasNumber;
     }
-    if (isFieldValid) {
-      const newUserInfo = { ...user };
+    if(isFieldValid){
+      const newUserInfo = {...user};
       newUserInfo[e.target.name] = e.target.value;
-      setUser(newUserInfo)
+      setUser(newUserInfo);
     }
   }
-  const handleAuthSubmit = (e) => {
-    if (newUser && user.email && user.password) {
-      firebase.auth().createUserWithEmailAndPassword(user.email, user.password)
-        .then(res => {
-          const newUserInfo = { ...user };
-          newUserInfo.success = true;
-          newUserInfo.error = '';
-          setUser(newUserInfo);
-          updateUserInfo(user.name)
-          // console.log(res)
-        })
-        .catch(error => {
-          // var errorCode = error.code;
-          // var errorMessage = error.message;
-          const newUserInfo = { ...user };
-          newUserInfo.success = false;
-          newUserInfo.error = error.message;
-          setUser(newUserInfo);
-          // console.log(error, "error is")
-        });
+  const handleSubmit = (e) => {
+    if(newUser && user.email && user.password){
+      createUserWithEmailAndPassword(user.name, user.email, user.password)
+      .then(res => {
+        handleResponse(res, true);
+      })
     }
-    if (!newUser && user.email && user.password) {
-      firebase.auth().signInWithEmailAndPassword(user.email, user.password)
-        .then(res => {
-          // console.log(res)
-          const newUserInfo = { ...user };
-          newUserInfo.success = true;
-          newUserInfo.error = '';
-          setUser(newUserInfo);
-          setLoggedInUser(newUserInfo);
-          history.replace(from);
-          console.log(res.user) 
-        })
-        .catch((error) => {
-          const newUserInfo = { ...user };
-          newUserInfo.success = false;
-          newUserInfo.error = error.message;
-          setUser(newUserInfo);
-        });
+
+    if(!newUser && user.email && user.password){
+      signInWithEmailAndPassword(user.email, user.password)
+      .then(res => {
+        handleResponse(res, true);
+      })
     }
     e.preventDefault();
   }
-  //update user informations
-  const updateUserInfo = name => {
-    const user = firebase.auth().currentUser;
-    user.updateProfile({
-      displayName: name
-      // photoURL: "https://example.com/jane-q-user/profile.jpg"
-    }).then(res => {
-      // console.log(res);
-    })
-    .catch(error => {
-      console.log(error);
-    });
-  }
-  const textStyle = {
-    'textAlign': "center",    
-    // "padding": "20px"
-  }
+
+
+
   return (
-    <div style={textStyle}>
-      <h1>Sign in With google</h1>
-      <h2>Name : {user.name}</h2>
-      <p>Email : {user.email}</p>
-      <img src={user.photo} alt="" /> <br />
-      {user.isLoggedIn ? <button onClick={handleSignOUt}> Sign Out</button> :
-        <button onClick={handleGoogleSignIn}>Google Sign In</button>
+    <div style={{textAlign: 'center'}}>
+      { user.isSignedIn ? <button onClick={signOut}>Sign Out</button> :
+        <button onClick={googleSignIn}>Sign In</button>
       }
-      <hr />
-      <h1>Sign Up With Email & PassWord</h1><br />
-      {/* <h2>name : {user.name}</h2>
-      <h2>{user.email}</h2>
-      <p>password : {user.password}</p> */}
-      <input type="checkbox" onChange={() => setNewUser(!newUser)} name="newUser" id="" />
-      <label htmlFor="newUser" >NewUser Sign In</label>
-      <form onSubmit={handleAuthSubmit}>
-        {newUser && <input type="text" name="name" onChange={handleOnBlur} placeholder="write your name" />
-        }
-        <br />
-        <input type="email" name="email" onBlur={handleOnBlur} required placeholder="input your email" /> <br />
-        <input type="password" name="password" onBlur={handleOnBlur} required placeholder="input your password" /><br />
-        <input type="submit" value="Submit" />
-      </form>
-      <p style={{ color: 'red' }}>{user.error}</p>
+      <br/>
+      <button onClick={fbSignIn}>Sign in using Facebook</button>
       {
-        user.success && <p style={{ color: 'green' }}>successfully {newUser ? "created" : "logged In"} </p>
+        user.isSignedIn && <div>
+          <p>Welcome, {user.name}!</p>
+          <p>Your email: {user.email}</p>
+          <img src={user.photo} alt=""/>
+        </div>
       }
+
+      <h1>Our own Authentication</h1>
+      <input type="checkbox" onChange={() => setNewUser(!newUser)} name="newUser" id=""/>
+      <label htmlFor="newUser">New User Sign up</label>
+      <form onSubmit={handleSubmit}>
+        {newUser && <input name="name" type="text" onBlur={handleBlur} placeholder="Your name"/>}
+        <br/>
+        <input type="text" name="email" onBlur={handleBlur} placeholder="Your Email address" required/>
+        <br/>
+        <input type="password" name="password" onBlur={handleBlur} placeholder="Your Password" required/>
+        <br/>
+        <input type="submit" value={newUser ? 'Sign up' : 'Sign in'}/>
+      </form>
+      <p style={{color: 'red'}}>{user.error}</p>
+      { user.success && <p style={{color: 'green'}}>User { newUser ? 'created' : 'Logged In'} successfully</p>}
     </div>
   );
 }
-
 
 export default Login;
